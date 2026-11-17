@@ -7,6 +7,10 @@ on:
       - develop
       - bugfixes
 
+concurrency:
+  group: pr-ci-rotki_ci.yml-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   check-changes:
     strategy:
