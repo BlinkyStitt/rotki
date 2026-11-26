@@ -260,7 +260,7 @@ jobs:
           name: videos-${{ runner.os }}
           path: ./frontend/app/tests/e2e/videos
   done:
-    if: ${{ always() }}
+    if: ${{ !cancelled() }}
     needs: [ 'check-changes', 'check-frontend', 'docs', 'lint-backend', 'test-backend', 'test-e2e' ]
     strategy:
       matrix:
