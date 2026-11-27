@@ -31,7 +31,7 @@ setup(
     python_requires='>=3.6',
     install_requires=requirements,
     use_scm_version=True,
-    setup_requires=['setuptools_scm'],
+    setup_requires=['setuptools_scm<6'],
     long_description=directory.joinpath('README.md').read_text(),
     long_description_content_type='text/markdown',
     classifiers=[

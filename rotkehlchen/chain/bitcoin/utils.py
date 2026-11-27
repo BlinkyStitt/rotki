@@ -3,6 +3,7 @@ from typing import Any, List, Tuple
 
 import base58check
 import bech32
+from Crypto.Hash import RIPEMD160
 
 from rotkehlchen.errors import EncodingError
 from rotkehlchen.typing import BTCAddress
@@ -59,9 +60,8 @@ def is_valid_base58_address(value: str) -> bool:
 
 
 def hash160(msg: bytes) -> bytes:
-    h = hashlib.new('ripemd160')
-    h.update(hashlib.sha256(msg).digest())
-    return h.digest()
+    # RIPEMD-160 is required by Bitcoin but is not available in every OpenSSL build.
+    return RIPEMD160.new(hashlib.sha256(msg).digest()).digest()
 
 
 def _calculate_hash160_and_checksum(prefix: bytes, data: bytes) -> Tuple[bytes, bytes]:

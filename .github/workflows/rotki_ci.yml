@@ -1,279 +1,344 @@
 name: Rotki CI
-
-on:
-  pull_request:
-    branches:
-      - master
-      - develop
-      - bugfixes
-
 concurrency:
-  group: pr-ci-rotki_ci.yml-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  group: pr-ci-rotki_ci.yml-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id
+    }}
   cancel-in-progress: true
-
 jobs:
   check-changes:
-    strategy:
-      matrix:
-        os: [ ubuntu-18.04 ]
-        node-version: [ 14.x ]
-    runs-on: ${{ matrix.os }}
+    name: Select component validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
-      backend_tasks: ${{ steps.checker.outputs.backend_tasks }}
-      frontend_tasks: ${{ steps.checker.outputs.frontend_tasks }}
-      documentation_tasks: ${{ steps.checker.outputs.documentation_tasks }}
+      backend_tasks: ${{ steps.paths.outputs.backend_tasks }}
+      frontend_tasks: ${{ steps.paths.outputs.frontend_tasks }}
+      documentation_tasks: ${{ steps.paths.outputs.documentation_tasks }}
     steps:
-      - uses: actions/checkout@v2
-      - uses: ./.github/actions/job-checker
-        id: checker
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          documentation_paths: |
-            docs
-          backend_paths: |
-            rotkehlchen
-            requirements.txt
-            requirements_dev.txt
-            requirements_lint.txt
-          frontend_paths: |
-            frontend/app
-
-
+    - &id001
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - id: paths
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 .github/scripts/rotki_changes.py
   check-frontend:
-    needs: ['check-changes']
-    if: ${{ needs.check-changes.outputs.frontend_tasks }}
+    needs:
+    - check-changes
+    if: ${{ needs.check-changes.outputs.frontend_tasks == 'true' }}
     strategy:
       matrix:
-        os: [ubuntu-18.04]
-        node-version: [14.x]
+        os:
+        - ubuntu-22.04
+        node-version:
+        - 14.x
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
-      - name: Setup
-        uses: actions/setup-node@v1
-        with:
-          node-version: '14.x'
-      - name: Store npm cache
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.npm
-            ~/.cache/Cypress
-          key: ${{ runner.os }}-node--ci-${{ hashFiles('**/app/package-lock.json') }}
-      - name: Install dependencies
-        working-directory: ./frontend/app
-        run: |
-          npm install -g npm@7
-          if ! npm ci --exit-code; then
-            npm ci
-          fi
-      - name: Lint code
-        working-directory: ./frontend/app
-        run: npm run lint:check
-      - name: Lint style
-        working-directory: ./frontend/app
-        run: npm run lint:style
-      - name: Build
-        working-directory: ./frontend/app
-        run: npm run build
-      - name: Run unit tests
-        working-directory: ./frontend/app
-        run: npm run test:unit
-      - name: Upload coverage
-        working-directory: ./frontend/app
-        run: cd .. && bash <(curl -s https://codecov.io/bash) -F frontend_unit
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - name: Setup
+      uses: actions/setup-node@v6
+      with:
+        node-version: 14.x
+    - name: Store npm cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: '~/.npm
 
+          ~/.cache/Cypress
+
+          '
+        key: ${{ runner.os }}-node--ci-${{ hashFiles('**/app/package-lock.json') }}
+    - name: Install dependencies
+      working-directory: ./frontend/app
+      run: "npm install -g npm@7\nif ! npm ci --exit-code; then\n  npm ci\nfi\n"
+    - name: Lint code
+      working-directory: ./frontend/app
+      run: npm run lint:check
+    - name: Lint style
+      working-directory: ./frontend/app
+      run: npm run lint:style
+    - name: Build
+      working-directory: ./frontend/app
+      run: npm run build
+    - name: Run unit tests
+      working-directory: ./frontend/app
+      run: npm run test:unit
+    - name: Upload coverage
+      working-directory: ./frontend/app
+      run: cd .. && bash <(curl -s https://codecov.io/bash) -F frontend_unit
   docs:
-    needs: [ 'check-changes' ]
-    if: ${{ needs.check-changes.outputs.documentation_tasks }}
+    needs:
+    - check-changes
+    if: ${{ needs.check-changes.outputs.documentation_tasks == 'true' }}
     strategy:
       matrix:
-        os: [ubuntu-18.04]
-        python-version: [3.7]
+        os:
+        - ubuntu-22.04
+        python-version:
+        - 3.7
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
-      - name: Setup
-        uses: actions/setup-python@v1
-        with:
-          python-version: '3.7'
-      - name: Install dependencies
-        run: |
-          pip install -r requirements_docs.txt
-          pip install -e .
-          git rev-parse HEAD
-      - name: Build html docs
-        run: cd docs && make html
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - name: Setup
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+      with:
+        python-version: '3.7'
+    - name: Install the required SQLCipher 4 native library
+      run: './install_deps.sh
 
+        sudo ldconfig
+
+        '
+    - name: Use the last pip release that supports Python 3.7
+      run: python -m pip install --upgrade pip==24.0 wheel
+    - name: Install dependencies
+      run: 'pip install -r requirements_docs.txt
+
+        pip install -e .
+
+        git rev-parse HEAD
+
+        '
+    - name: Build html docs
+      run: cd docs && make html
+    env:
+      PIP_CONSTRAINT: ${{ github.workspace }}/.github/constraints-py37.txt
   lint-backend:
-    needs: ['check-changes']
-    if: ${{ needs.check-changes.outputs.backend_tasks }}
+    needs:
+    - check-changes
+    if: ${{ needs.check-changes.outputs.backend_tasks == 'true' }}
     strategy:
       matrix:
-        os: [ubuntu-18.04]
-        python-version: [3.7]
+        os:
+        - ubuntu-22.04
+        python-version:
+        - 3.7
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
-      - name: Setup
-        uses: actions/setup-python@v1
-        with:
-          python-version: '3.7'
-      - name: Install dependencies
-        run: |
-          pip install -r requirements_lint.txt
-          pip install -e .
-          git rev-parse HEAD
-      - name: Lint
-        run: make lint
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - name: Setup
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+      with:
+        python-version: '3.7'
+    - name: Install the required SQLCipher 4 native library
+      run: './install_deps.sh
 
+        sudo ldconfig
+
+        '
+    - name: Use the last pip release that supports Python 3.7
+      run: python -m pip install --upgrade pip==24.0 wheel
+    - name: Install dependencies
+      run: 'pip install -r requirements_lint.txt
+
+        pip install -e .
+
+        git rev-parse HEAD
+
+        '
+    - name: Lint
+      run: make lint
+    env:
+      PIP_CONSTRAINT: ${{ github.workspace }}/.github/constraints-py37.txt
   test-backend:
-    if: ${{ needs.check-changes.outputs.backend_tasks }}
-    needs: ['lint-backend', 'check-changes']
+    if: ${{ needs.check-changes.outputs.backend_tasks == 'true' }}
+    needs:
+    - lint-backend
+    - check-changes
     timeout-minutes: 40
     env:
       CI: true
+      PIP_CONSTRAINT: ${{ github.workspace }}/.github/constraints-py37.txt
     strategy:
       matrix:
-        os: [ubuntu-18.04]
-        python-version: [3.7]
+        os:
+        - ubuntu-22.04
+        python-version:
+        - 3.7
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
-      - name: Setup SQLCipher
-        run: |
-          sudo apt-get update
-          sudo apt-get install libxml2-utils
-          ./install_deps.sh
-          sudo ldconfig
-      - name: Set up python
-        uses: actions/setup-python@v1
-        with:
-          python-version: '3.7'
-      - name: Store python cache
-        uses: actions/cache@v2
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-      - name: Store test dir
-        uses: actions/cache@v2
-        with:
-          path: ~/.cache/.rotkehlchen-test-dir
-          key: ${{ runner.os }}-testdir-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-testdir-
-      - name: Install dependencies
-        run: |
-          pip install --upgrade "pip<19.0.0" wheel
-          pip install codecov pytest-cov
-          pip install -r requirements_dev.txt
-          pip install -e .
-      - name: Run Test
-        run: |
-          COVERAGE_ARGS='--cov=./'
-          python pytestgeventwrapper.py $COVERAGE_ARGS rotkehlchen/tests
-      - name: Upload coverage
-        run: bash <(curl -s https://codecov.io/bash) -F backend
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - name: Setup SQLCipher
+      run: 'sudo apt-get update
 
+        sudo apt-get install libxml2-utils
+
+        ./install_deps.sh
+
+        sudo ldconfig
+
+        '
+    - name: Set up python
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+      with:
+        python-version: '3.7'
+    - name: Store python cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+    - name: Store test dir
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: ~/.cache/.rotkehlchen-test-dir
+        key: ${{ runner.os }}-testdir-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: '${{ runner.os }}-testdir-
+
+          '
+    - name: Use the last pip release that supports Python 3.7
+      run: python -m pip install --upgrade pip==24.0 wheel
+    - name: Install dependencies
+      run: 'python -m pip install codecov -r requirements_dev.txt -e .
+
+        python -m pip check
+
+        '
+    - name: Run Test
+      run: 'COVERAGE_ARGS=''--cov=./''
+
+        python pytestgeventwrapper.py $COVERAGE_ARGS rotkehlchen/tests
+
+        '
+    - name: Upload coverage
+      run: bash <(curl -s https://codecov.io/bash) -F backend
   test-e2e:
-    needs: [ 'check-changes' ]
-    if: |
-      contains(needs.check-changes.outputs.frontend_tasks, true) ||
-      contains(needs.check-changes.outputs.backend_tasks, true)
+    needs:
+    - check-changes
+    if: ${{ needs.check-changes.outputs.frontend_tasks == 'true' || needs.check-changes.outputs.backend_tasks
+      == 'true' }}
     strategy:
       matrix:
-        os: [ubuntu-18.04]
-        python-version: [3.7]
-        node-version: [14.x]
+        os:
+        - ubuntu-22.04
+        python-version:
+        - 3.7
+        node-version:
+        - 14.x
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
-      - name: Set up python
-        uses: actions/setup-python@v1
-        with:
-          python-version: '3.7'
-      - name: Setup node
-        uses: actions/setup-node@v1
-        with:
-          node-version: '14.x'
-      - name: Store python cache
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cache/pip
-            ~/.cache/.rotkehlchen-test-dir
-          key: ${{ runner.os }}-pip-e2e-${{ hashFiles('**/requirements.txt') }}
-      - name: Store npm cache
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.npm
-            ~/.cache/Cypress
-          key: ${{ runner.os }}-node--e2e-${{ hashFiles('**/app/package-lock.json') }}
-      - name: Store frontend cache
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/rotki-e2e/price_history
-            ~/rotki-e2e/icons
-            ~/rotki-e2e/assets
-          key: ${{ runner.os }}-e2e-cache-${{ hashFiles('**/app/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-e2e-cache-
-      - name: Setup SQLCipher
-        run: |
-          sudo apt-get update
-          sudo apt-get install libxml2-utils
-          ./install_deps.sh
-          sudo ldconfig
-      - name: Setup backend
-        run: |
-          pip install -r requirements_dev.txt
-          pip install -e .
-      - name: Restore dependencies
-        working-directory: ./frontend/app
-        run: |
-          npm install -g npm@7
-          if ! npm ci --exit-code; then
-            npm ci
-          fi
-      - name: Run integration tests
-        working-directory: ./frontend/app
-        run: npm run test:integration-ci
-      - name: Upload coverage
-        working-directory: ./frontend/app
-        run: cd .. && bash <(curl -s https://codecov.io/bash) -F frontend_integration
-      - uses: actions/upload-artifact@v2
-        if: failure()
-        with:
-          name: screenshots-${{ runner.os }}
-          path: ./frontend/app/tests/e2e/screenshots
-      - name: Upload backend logs
-        uses: actions/upload-artifact@v2
-        if: always()
-        with:
-          name: backend-logs-${{ runner.os }}
-          path: ~/rotkehlchen-e2e.log
-      - uses: actions/upload-artifact@v2
-        if: always()
-        with:
-          name: videos-${{ runner.os }}
-          path: ./frontend/app/tests/e2e/videos
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - name: Set up python
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+      with:
+        python-version: '3.7'
+    - name: Setup node
+      uses: actions/setup-node@v6
+      with:
+        node-version: 14.x
+    - name: Store python cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: '~/.cache/pip
+
+          ~/.cache/.rotkehlchen-test-dir
+
+          '
+        key: ${{ runner.os }}-pip-e2e-${{ hashFiles('**/requirements.txt') }}
+    - name: Store npm cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: '~/.npm
+
+          ~/.cache/Cypress
+
+          '
+        key: ${{ runner.os }}-node--e2e-${{ hashFiles('**/app/package-lock.json') }}
+    - name: Store frontend cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: '~/rotki-e2e/price_history
+
+          ~/rotki-e2e/icons
+
+          ~/rotki-e2e/assets
+
+          '
+        key: ${{ runner.os }}-e2e-cache-${{ hashFiles('**/app/package-lock.json') }}
+        restore-keys: '${{ runner.os }}-e2e-cache-
+
+          '
+    - name: Setup SQLCipher
+      run: 'sudo apt-get update
+
+        sudo apt-get install libxml2-utils
+
+        ./install_deps.sh
+
+        sudo ldconfig
+
+        '
+    - name: Use the last pip release that supports Python 3.7
+      run: python -m pip install --upgrade pip==24.0 wheel
+    - name: Setup backend
+      run: 'pip install -r requirements_dev.txt
+
+        pip install -e .
+
+        '
+    - name: Restore dependencies
+      working-directory: ./frontend/app
+      run: "npm install -g npm@7\nif ! npm ci --exit-code; then\n  npm ci\nfi\n"
+    - name: Run integration tests
+      working-directory: ./frontend/app
+      run: npm run test:integration-ci
+    - name: Upload coverage
+      working-directory: ./frontend/app
+      run: cd .. && bash <(curl -s https://codecov.io/bash) -F frontend_integration
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      if: failure()
+      with:
+        name: screenshots-${{ runner.os }}
+        path: ./frontend/app/tests/e2e/screenshots
+    - name: Upload backend logs
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      if: always()
+      with:
+        name: backend-logs-${{ runner.os }}
+        path: ~/rotkehlchen-e2e.log
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      if: always()
+      with:
+        name: videos-${{ runner.os }}
+        path: ./frontend/app/tests/e2e/videos
+    env:
+      PIP_CONSTRAINT: ${{ github.workspace }}/.github/constraints-py37.txt
   done:
-    if: ${{ always() }}
-    needs: [ 'check-changes', 'check-frontend', 'docs', 'lint-backend', 'test-backend', 'test-e2e' ]
-    strategy:
-      matrix:
-        os: [ubuntu-18.04]
-    runs-on: ${{ matrix.os }}
+    name: CI (rotki_ci.yml)
+    if: ${{ !cancelled() }}
+    needs:
+    - check-changes
+    - check-frontend
+    - docs
+    - lint-backend
+    - test-backend
+    - test-e2e
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Check if any task failed
-        run: |
-          data=($(echo "${{ toJSON(needs.*.result) }}" | sed 's/[][,]//g'))
-          for i in "${data[@]}"
-          do
-            if [[ $i == "failure" ]]; then
-                echo "::error::At least one required task failed"
-                exit 1;
-            fi
-          done
+    - *id001
+    - name: Verify validation contract
+      env:
+        CI_GATE_NEEDS: ${{ toJSON(needs) }}
+      run: 'python3 -m unittest discover -s .github/scripts -p "test_*.py"
+
+        python3 .github/scripts/rotki_gate.py'
+'on':
+  pull_request:
+    branches:
+    - master
+    - develop
+    - bugfixes
+permissions:
+  contents: read

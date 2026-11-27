@@ -2,6 +2,7 @@ import pytest
 
 from rotkehlchen.chain.bitcoin.hdkey import HDKey, XpubType
 from rotkehlchen.chain.bitcoin.utils import (
+    hash160,
     is_valid_btc_address,
     is_valid_derivation_path,
     pubkey_to_base58_address,
@@ -18,6 +19,21 @@ from rotkehlchen.tests.utils.factories import (
     UNIT_BTC_ADDRESS2,
     UNIT_BTC_ADDRESS3,
 )
+
+
+@pytest.mark.parametrize('message, expected', [
+    (b'', 'b472a266d0bd89c13706a4132ccfb16f7c3b9fcb'),
+    (
+        bytes.fromhex('0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798'),
+        '751e76e8199196d454941c45d1b3a323f1433bd6',
+    ),
+])
+def test_hash160_without_openssl_ripemd160(monkeypatch, message, expected):
+    def unavailable(*args, **kwargs):
+        raise ValueError('unsupported hash type ripemd160')
+
+    monkeypatch.setattr('hashlib.new', unavailable)
+    assert hash160(message).hex() == expected
 
 
 def test_is_valid_btc_address():
