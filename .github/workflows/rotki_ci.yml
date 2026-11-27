@@ -1,6 +1,7 @@
 name: Rotki CI
 concurrency:
-  group: pr-ci-rotki_ci.yml-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  group: pr-ci-rotki_ci.yml-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id
+    }}
   cancel-in-progress: true
 jobs:
   check-changes:
@@ -87,6 +88,14 @@ jobs:
       uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
       with:
         python-version: '3.7'
+    - name: Install the required SQLCipher 4 native library
+      run: './install_deps.sh
+
+        sudo ldconfig
+
+        '
+    - name: Use the last pip release that supports Python 3.7
+      run: python -m pip install --upgrade pip==24.0 wheel
     - name: Install dependencies
       run: 'pip install -r requirements_docs.txt
 
@@ -97,6 +106,8 @@ jobs:
         '
     - name: Build html docs
       run: cd docs && make html
+    env:
+      PIP_CONSTRAINT: ${{ github.workspace }}/.github/constraints-py37.txt
   lint-backend:
     needs:
     - check-changes
@@ -116,6 +127,14 @@ jobs:
       uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
       with:
         python-version: '3.7'
+    - name: Install the required SQLCipher 4 native library
+      run: './install_deps.sh
+
+        sudo ldconfig
+
+        '
+    - name: Use the last pip release that supports Python 3.7
+      run: python -m pip install --upgrade pip==24.0 wheel
     - name: Install dependencies
       run: 'pip install -r requirements_lint.txt
 
@@ -126,6 +145,8 @@ jobs:
         '
     - name: Lint
       run: make lint
+    env:
+      PIP_CONSTRAINT: ${{ github.workspace }}/.github/constraints-py37.txt
   test-backend:
     if: ${{ needs.check-changes.outputs.backend_tasks == 'true' }}
     needs:
@@ -134,6 +155,7 @@ jobs:
     timeout-minutes: 40
     env:
       CI: true
+      PIP_CONSTRAINT: ${{ github.workspace }}/.github/constraints-py37.txt
     strategy:
       matrix:
         os:
@@ -172,10 +194,10 @@ jobs:
         restore-keys: '${{ runner.os }}-testdir-
 
           '
+    - name: Use the last pip release that supports Python 3.7
+      run: python -m pip install --upgrade pip==24.0 wheel
     - name: Install dependencies
-      run: 'pip install --upgrade "pip<19.0.0" wheel
-
-        pip install codecov pytest-cov
+      run: 'pip install codecov pytest-cov
 
         pip install -r requirements_dev.txt
 
@@ -193,7 +215,8 @@ jobs:
   test-e2e:
     needs:
     - check-changes
-    if: ${{ needs.check-changes.outputs.frontend_tasks == 'true' || needs.check-changes.outputs.backend_tasks == 'true' }}
+    if: ${{ needs.check-changes.outputs.frontend_tasks == 'true' || needs.check-changes.outputs.backend_tasks
+      == 'true' }}
     strategy:
       matrix:
         os:
@@ -257,6 +280,8 @@ jobs:
         sudo ldconfig
 
         '
+    - name: Use the last pip release that supports Python 3.7
+      run: python -m pip install --upgrade pip==24.0 wheel
     - name: Setup backend
       run: 'pip install -r requirements_dev.txt
 
@@ -288,6 +313,8 @@ jobs:
       with:
         name: videos-${{ runner.os }}
         path: ./frontend/app/tests/e2e/videos
+    env:
+      PIP_CONSTRAINT: ${{ github.workspace }}/.github/constraints-py37.txt
   done:
     name: CI (rotki_ci.yml)
     if: ${{ !cancelled() }}
