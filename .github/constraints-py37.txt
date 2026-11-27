@@ -15,3 +15,6 @@ setuptools-scm<6
 
 # The pinned Substrate client uses the verified 0.10 decoder API.
 scalecodec==0.10.88
+
+# Version 1 renamed the native module imported by the pinned Substrate client.
+py-ed25519-bindings==0.1.3
