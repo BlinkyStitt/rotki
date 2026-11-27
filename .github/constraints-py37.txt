@@ -12,3 +12,6 @@ MarkupSafe<2.1
 importlib-metadata<5
 # The old setuptools setup_requires resolver ignores Requires-Python.
 setuptools-scm<6
+
+# The pinned Substrate client uses the verified 0.10 decoder API.
+scalecodec==0.10.88
